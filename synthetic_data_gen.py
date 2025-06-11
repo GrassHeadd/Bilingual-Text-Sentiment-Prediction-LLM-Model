@@ -8,21 +8,6 @@ import pandas as pd
 tokenizer = AutoTokenizer.from_pretrained("unsloth/Llama-3.2-1B-Instruct")
 model = AutoModelForCausalLM.from_pretrained("unsloth/Llama-3.2-1B-Instruct")
 
-user_input_neutral_zero = """
-    Generate a financial news headline with neutral sentiment. 
-    The headline should be 5-25 words, factual in tone.
-    Add the sentiment at the end of the headline after a '//'.
-        
-    Example: "this is the news you generated //neutral"
-    """
-user_input_positive_zero = """
-    Generate a financial news headline with positive sentiment.
-    The headline should be 5-25 words, optimistic in tone.
-    Add the sentiment at the end of the headline after a //.
-    
-    Example: this is the news you generated //positive"
-    """
-
 def generate_user_input(shot, sentiment, type_of_input):
     """
     Generate user input for the model based on the type of input and sentiment.
@@ -36,18 +21,16 @@ def generate_user_input(shot, sentiment, type_of_input):
         str: The generated input string.
     """
     output = f"Generate a financial {type_of_input} with {sentiment} sentiment. "
-    output += f"The {type_of_input} should be 5-25 words, factual in tone. "
-    output += f"Add the sentiment at the end of the {type_of_input} after a '#'.\n\n"
-    output += "Sentiment should always only be 'neutral', 'positive', or 'negative' and always be one sentiment.\n\n"
+    output += f"The {type_of_input} should be 5-30 words, factual in tone. "
     
     if shot == 0:
-        output += f"Example: this is the {type_of_input} you generated #{sentiment}"
+        output += f"Example: this is the {type_of_input} you generated"
         return output
     
     examples = {
-        "neutral": "Example: A Sexist Joke Cost Ken Fisher $4 Billion in Assets. He Still Runs $121 Billion. #neutral\n",
-        "positive": "Example: Western Union will be working with MercadoLibre, the South American eCommerce giant, so digital remittances can be sent in Mexico. #positive\n",
-        "negative": "Example: The app will be delisted from Apple's App Store on Oct. 5. #negative\n"
+        "neutral": "Example: A Sexist Joke Cost Ken Fisher $4 Billion in Assets. He Still Runs $121 Billion.\n",
+        "positive": "Example: Western Union will be working with MercadoLibre, the South American eCommerce giant, so digital remittances can be sent in Mexico.\n",
+        "negative": "Example: The app will be delisted from Apple's App Store on Oct. 5.\n"
     }
     
     output += examples.get(sentiment, "")
@@ -119,23 +102,91 @@ def extract_headline(generated_text):
     clean_content = re.sub(r'<\|[^|]+\|>', '', content.strip())
     return clean_content
 
-def main():
-    """Main function to generate synthetic data."""
+def check_prompt(prompt):
+    """
+    Check if the prompt is valid for the model.
+    
+    Args:
+        prompt (str): The input prompt to check.
+        
+    Returns:
+        bool: True if the prompt is valid, False otherwise.
+    """
     messages = [
-        {"role": "system", "content": "You are a financial news generator specialized in creating high-quality synthetic data. Your task is to create realistic financial news headlines with specific sentiments."},
-        {"role": "user", "content": generate_user_input(0, "neutral", "headline")},
+        {"role": "system", "content": "You are a synthetic data validator. Your task is to determine if the provided prompt is valid for generating synthetic data. Return only True or False."},   
+        {"role": "user", "content": "Is the prompt valid?"},
+        {"role": "assistant", "content": prompt}
     ]
+    inputs = tokenizer.apply_chat_template(
+        messages,
+        tokenize=True,
+        return_tensors="pt",
+    )
+    outputs = model.generate(
+        input_ids=inputs, 
+        max_new_tokens=50,
+        use_cache=True,
+        temperature=0.9, 
+        min_p=0.1
+    )
+    response = tokenizer.batch_decode(outputs)[0]
+    return response
+
+def main():
+    sentiments = ["neutral", "positive", "negative"]
+    type_of_shot = [0, 1]
     
-    print(messages)
     synthetic_data = []
-    for i in range(10):
-        print(i)
-        generated_text = generate_synthetic_input(messages)
+    n = 0  # Counter for the number of generated headlines
     
-        # Extract just the headline
-        headline = extract_headline(generated_text)
-        print(headline)
+    for sentiment in sentiments:
+        for shot in type_of_shot:
+            messages = [
+                {"role": "system", "content": "You are a market news generator. Generate ONLY the headline text. Do NOT include any introductions, explanations, or formatting instructions. Do NOT write phrases like 'Here's a headline' or 'Market headline:'. Just output the clean headline text directly."},
+                {"role": "user", "content": generate_user_input(shot, sentiment, "headline")},
+            ]
+    
+            i = 0
+            
+            while i < 79:
+                if n > 1:
+                    break
+                print("generating ", n)
+                generated_text = generate_synthetic_input(messages)
+            
+                # Extract just the headline
+                headline = extract_headline(generated_text)
+                
+                synthetic_data.append({
+                        "input": headline,
+                        "output": sentiment,
+                        "instruction": "Base on the sentiment of the headline, classify it as neutral, positive, or negative."
+                    })
+                print(headline)
+                i += 1
+                n += 1
+                    
+    os.makedirs("data", exist_ok=True)
+    
+    df = pd.DataFrame(synthetic_data)
+    csv_path = "data/synthetic_data_generate.csv"
 
+    # Check if file exists and append if it does
+    if os.path.exists(csv_path):
+        # Load existing data
+        existing_df = pd.read_csv(csv_path)
+        
+        # Combine existing and new data
+        combined_df = pd.concat([existing_df, df], ignore_index=True)
+        
+        # Save the combined data
+        combined_df.to_csv(csv_path, index=False)
+        print(f"Appended {len(df)} new entries to existing data. Total entries: {len(combined_df)}")
+    else:
+        # If file doesn't exist yet, just save the new data
+        df.to_csv(csv_path, index=False)
+        print(f"Created new file with {len(df)} entries")
+    
+    print("done lol")
 
-if __name__ == "__main__":
-    main()
+main()
