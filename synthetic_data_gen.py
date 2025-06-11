@@ -102,36 +102,6 @@ def extract_headline(generated_text):
     clean_content = re.sub(r'<\|[^|]+\|>', '', content.strip())
     return clean_content
 
-def check_prompt(prompt):
-    """
-    Check if the prompt is valid for the model.
-    
-    Args:
-        prompt (str): The input prompt to check.
-        
-    Returns:
-        bool: True if the prompt is valid, False otherwise.
-    """
-    messages = [
-        {"role": "system", "content": "You are a synthetic data validator. Your task is to determine if the provided prompt is valid for generating synthetic data. Return only True or False."},   
-        {"role": "user", "content": "Is the prompt valid?"},
-        {"role": "assistant", "content": prompt}
-    ]
-    inputs = tokenizer.apply_chat_template(
-        messages,
-        tokenize=True,
-        return_tensors="pt",
-    )
-    outputs = model.generate(
-        input_ids=inputs, 
-        max_new_tokens=50,
-        use_cache=True,
-        temperature=0.9, 
-        min_p=0.1
-    )
-    response = tokenizer.batch_decode(outputs)[0]
-    return response
-
 def main():
     sentiments = ["neutral", "positive", "negative"]
     type_of_shot = [0, 1]
