@@ -21,7 +21,7 @@ gen_config = GenerationConfig(
     top_p=0.9,
 )
 
-eval_df = pd.read_csv("data/combined_val_data.csv")
+eval_df = pd.read_csv("../data/combined_val_data.csv")
 
 
 def extract_sentiment_from_response(response: str) -> str:
